@@ -25,6 +25,7 @@ RISK_DOLLARS = BASE_CAPITAL * RISK_FRACTION
 MAX_POSITION_VALUE = 100.0
 MAX_DAILY_LOSS = 2.0
 MAX_TRADES_PER_DAY = 2
+MAX_ENTRIES_LAST_7D = 3  # conservative guard for Alpaca paper PDT simulation
 MAX_OPEN_POSITIONS = 1
 ENTRY_CUTOFF = (15, 30)
 FLATTEN_TIME = (15, 55)
@@ -289,6 +290,17 @@ def _daily_order_stats(orders, today):
     return len(parents), realized, parents
 
 
+def _recent_entry_count(orders):
+    # Count filled NEXUS entry parents over the last seven calendar days.
+    # This is deliberately conservative: it counts entries even if they were not
+    # closed intraday, rather than risking a fourth simulated day trade.
+    return sum(
+        1 for order in orders
+        if str(order.get("client_order_id", "")).startswith(BOT_PREFIX)
+        and float(order.get("filled_qty") or 0) > 0
+    )
+
+
 def flatten_bot_positions(client, positions, parents):
     """Close only NEXUS-owned positions and cancel their remaining bracket legs."""
     owned = {o.get("symbol"): o for o in parents
@@ -349,6 +361,9 @@ def run_cycle(client, symbols, now=None):
     start_utc = datetime.combine(now.date(), datetime.min.time(), tzinfo=ET).astimezone(timezone.utc)
     orders = client.orders(after=start_utc.isoformat().replace("+00:00", "Z"))
     trade_count, realized, parents = _daily_order_stats(orders, today)
+    week_start = (now - timedelta(days=7)).astimezone(timezone.utc)
+    recent_orders = client.orders(after=week_start.isoformat().replace("+00:00", "Z"))
+    recent_entries = _recent_entry_count(recent_orders)
     positions = client.positions()
 
     if now >= flatten_at:
@@ -366,6 +381,8 @@ def run_cycle(client, symbols, now=None):
         return {"status": "blocked", "message": "Daily loss guard reached (limit: $%.2f). No more entries today." % MAX_DAILY_LOSS}
     if trade_count >= MAX_TRADES_PER_DAY:
         return {"status": "blocked", "message": "Daily trade limit reached (%d)." % MAX_TRADES_PER_DAY}
+    if recent_entries >= MAX_ENTRIES_LAST_7D:
+        return {"status": "blocked", "message": "Conservative 7-day day-trade guard reached (%d entries). Wait until an entry rolls out of the lookback window." % MAX_ENTRIES_LAST_7D}
 
     if positions:
         return {"status": "idle", "message": "An open position already exists. NEXUS allows only one position at a time."}
