@@ -101,13 +101,15 @@ class AlpacaPaperClient:
         )
         return result.get("bars", [])
 
-    def submit_bracket(self, symbol, qty, stop, target, client_order_id):
-        # Whole-share bracket orders only. Fractional bracket support is not assumed.
+    def submit_bracket(self, symbol, qty, entry_limit, stop, target, client_order_id):
+        # Whole-share limit-entry bracket orders only. Fractional bracket support is not assumed.
+        # The entry limit prevents the bot paying above the price used for risk sizing.
         body = {
             "symbol": symbol,
             "qty": str(int(qty)),
             "side": "buy",
-            "type": "market",
+            "type": "limit",
+            "limit_price": "%.2f" % entry_limit,
             "time_in_force": "day",
             "order_class": "bracket",
             "take_profit": {"limit_price": "%.2f" % target},
@@ -405,7 +407,8 @@ def run_cycle(client, symbols, now=None):
         if planned_risk > RISK_DOLLARS + 0.01:
             continue
         order = client.submit_bracket(
-            symbol, qty, round_price(signal["stop"]), round_price(signal["target"]), client_id
+            symbol, qty, round_price(signal["entry"]), round_price(signal["stop"]),
+            round_price(signal["target"]), client_id
         )
         return {
             "status": "submitted",
