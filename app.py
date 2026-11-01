@@ -384,7 +384,7 @@ with tab_bot:
     st.markdown("""
     <div class="nx-panel">
       <div class="nx-panel-title">ACTIVE STRATEGY PARAMETERS</div>
-      <div class="nx-panel-sub">Starting strategy capital: $100 · Risk per trade: $1 (1%) · Daily loss stop: $2 · Maximum 2 entries/day · Maximum 1 open position · Long-only · 15-minute opening range · 2R target · Entries stop at 3:30 PM ET · Bot positions flattened at 3:55 PM ET</div>
+      <div class="nx-panel-sub">Starting strategy capital: $100 · Risk per trade: $1 (1%) · Daily loss stop: $2 · Maximum 2 entries/day · Maximum 1 open position · Long-only · 15-minute opening range · 2R target · Entries stop at 3:30 PM ET · Bot positions flattened 5 minutes before session close (3:55 PM ET on regular days)</div>
     </div>
     """, unsafe_allow_html=True)
 
