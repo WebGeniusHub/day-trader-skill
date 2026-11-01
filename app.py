@@ -424,10 +424,16 @@ with tab_bot:
             account_ready = False
 
         doc_for_bot = load_watchlist() or {}
-        candidates = [x.get("symbol", "") for x in doc_for_bot.get("hits", []) if x.get("symbol")]
-        if not candidates:
-            candidates = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "INTC"]
-        candidates = list(dict.fromkeys(candidates))
+        # Keep a core liquid-symbol list available even when the daily scanner
+        # has produced matches; scanner hits are additional candidates, not a
+        # replacement for manually testable benchmark/large-cap tickers.
+        core_symbols = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "AMD", "INTC"]
+        scanner_symbols = [
+            str(x.get("symbol", "")).strip().upper()
+            for x in doc_for_bot.get("hits", [])
+            if x.get("symbol")
+        ]
+        candidates = list(dict.fromkeys(core_symbols + scanner_symbols))
         chosen_symbols = st.multiselect(
             "Symbols monitored by the bot (maximum 25)",
             options=candidates,
