@@ -401,22 +401,25 @@ def run_cycle(client, symbols, now=None):
         signal = orb_signal(bars, now)
         if not signal:
             continue
-        qty, planned_risk = size_position(signal["entry"], signal["stop"])
+        # Add one cent of limit-price tolerance, then size against that exact cap.
+        entry_limit = round_price(signal["entry"] + 0.01)
+        stop_price = round_price(signal["stop"])
+        qty, planned_risk = size_position(entry_limit, stop_price)
         if qty < 1:
             continue
         if planned_risk > RISK_DOLLARS + 0.01:
             continue
+        target_price = round_price(entry_limit + TARGET_R * (entry_limit - stop_price))
         order = client.submit_bracket(
-            symbol, qty, round_price(signal["entry"]), round_price(signal["stop"]),
-            round_price(signal["target"]), client_id
+            symbol, qty, entry_limit, stop_price, target_price, client_id
         )
         return {
             "status": "submitted",
             "symbol": symbol,
             "qty": qty,
-            "entry_reference": round_price(signal["entry"]),
-            "stop": round_price(signal["stop"]),
-            "target": round_price(signal["target"]),
+            "entry_limit": entry_limit,
+            "stop": stop_price,
+            "target": target_price,
             "planned_max_loss": planned_risk,
             "order_id": order.get("id"),
             "message": "Paper bracket order submitted. Check Alpaca for fill status; actual loss can exceed planned risk during gaps or slippage.",
