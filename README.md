@@ -227,7 +227,7 @@ Strategy and controls:
 - Entry on a completed 5-minute close above the opening-range high; stop at the range midpoint; target at 2R.
 - Fixed $100 strategy capital, 1% planned risk ($1) per trade, $100 maximum position value.
 - Whole-share bracket orders only; if one share would exceed the risk budget, the symbol is skipped.
-- One open position at a time, no more than two entries per day, $2 daily loss guard.
+- One open position at a time, no more than two entries per day, a conservative maximum of three bot entries in a rolling seven-calendar-day window, and a $2 daily loss guard.
 - New entries stop 25 minutes before the session close; NEXUS positions are flattened five minutes before the session close, including early-close sessions.
 - Duplicate daily orders are prevented with a deterministic Alpaca client order ID.
 - Historical replay includes estimated slippage and assumes the stop fills first if a bar touches both stop and target.
