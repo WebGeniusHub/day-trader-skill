@@ -337,12 +337,6 @@ def run_cycle(client, symbols, now=None):
     if account.get("status") != "ACTIVE" or account.get("trading_blocked"):
         return {"status": "blocked", "message": "Alpaca account is not active or trading is blocked."}
     equity = float(account.get("equity") or 0)
-    if equity > 110 or equity < 90:
-        return {"status": "blocked", "message": (
-            "Alpaca paper account equity is $%.2f. This bot is configured for a $100 paper account "
-            "and will only run when equity is between $90 and $110. Create/reset a paper account "
-            "with $100 starting balance first." % equity
-        )}
 
     clock = client.clock()
     if not clock.get("is_open"):
@@ -374,6 +368,13 @@ def run_cycle(client, symbols, now=None):
                 "symbols": flattened,
                 "message": ("Closed NEXUS positions for the intraday cutoff." if flattened
                             else "Intraday cutoff reached; no NEXUS-owned open positions found.")}
+
+    if equity > 110 or equity < 90:
+        return {"status": "blocked", "message": (
+            "Alpaca paper account equity is $%.2f. This bot is configured for a $100 paper account "
+            "and will only open new trades when equity is between $90 and $110. Create/reset a paper account "
+            "with $100 starting balance first. Any NEXUS position due for flattening was handled above." % equity
+        )}
 
     if (now.hour, now.minute) < (9, 45):
         return {"status": "idle", "message": "Waiting for the 15-minute opening range to complete (9:45 AM ET)."}
