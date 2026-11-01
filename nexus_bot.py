@@ -202,6 +202,7 @@ def backtest_orb(bars, capital=BASE_CAPITAL):
         sessions.setdefault(stamp.date(), []).append((stamp, bar))
     trades = []
     equity = float(capital)
+    valid_opening_sessions = 0
     for day in sorted(sessions):
         rows = sorted(sessions[day], key=lambda x: x[0])
         opening = [(t, b) for t, b in rows if (t.hour, t.minute) in ((9, 30), (9, 35), (9, 40))]
@@ -210,6 +211,7 @@ def backtest_orb(bars, capital=BASE_CAPITAL):
         opening.sort(key=lambda x: x[0])
         if [(x[0].hour, x[0].minute) for x in opening] != [(9, 30), (9, 35), (9, 40)]:
             continue
+        valid_opening_sessions += 1
         hi = max(float(x[1]["h"]) for x in opening)
         lo = min(float(x[1]["l"]) for x in opening)
         stop = (hi + lo) / 2
@@ -273,6 +275,9 @@ def backtest_orb(bars, capital=BASE_CAPITAL):
         "win_rate": round(100 * wins / len(trades), 1) if trades else 0.0,
         "net_pnl": round(equity - capital, 2),
         "ending_equity": round(equity, 2),
+        "bars_received": len(bars),
+        "sessions_with_data": len(sessions),
+        "valid_opening_sessions": valid_opening_sessions,
         "note": "Historical replay only; stop-first same-bar assumption and estimated slippage. Not a prediction.",
     }
 
