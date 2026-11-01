@@ -214,9 +214,9 @@ with st.sidebar:
     st.caption("Yahoo Finance")
     st.caption("Nasdaq Trader")
     st.markdown("---")
-    st.caption("No broker connection")
-    st.caption("No live orders")
-    st.caption("On-demand research only")
+    st.caption("Alpaca paper execution module")
+    st.caption("Live endpoint disabled")
+    st.caption("Risk-limited intraday system")
     st.markdown("---")
     st.caption("NEXUS TERMINAL · v1.0")
 
@@ -231,8 +231,8 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-tab_scan, tab_news, tab_entry, tab_about = st.tabs(
-    ["◈  MARKET SCANNER", "⌁  NEWS RADAR", "⌖  ENTRY LAB", "ⓘ  SYSTEM"]
+tab_scan, tab_news, tab_entry, tab_bot, tab_about = st.tabs(
+    ["◈  MARKET SCANNER", "⌁  NEWS RADAR", "⌖  ENTRY LAB", "⏵  AUTOPILOT", "ⓘ  SYSTEM"]
 )
 
 # ---------- Scanner ----------
@@ -369,6 +369,116 @@ with tab_entry:
             if code not in (0, 1):
                 st.warning("The entry check returned an error. Review the output above.")
 
+# ---------- NEXUS paper autopilot ----------
+with tab_bot:
+    from datetime import datetime, timedelta, timezone
+    from nexus_bot import (
+        AlpacaPaperClient, BotError, backtest_orb, load_symbols, run_cycle,
+        BASE_CAPITAL, RISK_DOLLARS, MAX_DAILY_LOSS, MAX_TRADES_PER_DAY,
+        TARGET_R,
+    )
+
+    st.markdown('<div class="nx-section"><div><small>MODULE 04 / EXECUTION ENGINE</small><h3>Paper autopilot</h3></div><span class="nx-pill">ALPACA PAPER ONLY</span></div>', unsafe_allow_html=True)
+    st.caption("A rules-based 15-minute opening-range breakout system. It can submit simulated Alpaca bracket orders; it cannot access Alpaca's live trading endpoint.")
+
+    st.markdown("""
+    <div class="nx-panel">
+      <div class="nx-panel-title">ACTIVE STRATEGY PARAMETERS</div>
+      <div class="nx-panel-sub">Starting strategy capital: $100 · Risk per trade: $1 (1%) · Daily loss stop: $2 · Maximum 2 entries/day · Maximum 1 open position · Long-only · 15-minute opening range · 2R target · Entries stop at 3:30 PM ET · Bot positions flattened at 3:55 PM ET</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    try:
+        alpaca_key = st.secrets.get("ALPACA_API_KEY", "")
+        alpaca_secret = st.secrets.get("ALPACA_SECRET_KEY", "")
+    except Exception:
+        alpaca_key, alpaca_secret = "", ""
+
+    if not alpaca_key or not alpaca_secret:
+        st.warning("Alpaca paper credentials are not configured yet.")
+        st.markdown("In Streamlit: **Manage app → Settings → Secrets**, then add your PAPER keys there. Do not paste keys into chat or commit them to GitHub.")
+        st.code('ALPACA_API_KEY = "YOUR_PAPER_KEY"\nALPACA_SECRET_KEY = "YOUR_PAPER_SECRET"', language="toml")
+        st.markdown("Create an Alpaca **paper-only** account and set its starting balance to **$100**. The bot blocks accounts whose equity is outside $90–$110.")
+    else:
+        client = AlpacaPaperClient(alpaca_key, alpaca_secret)
+        try:
+            account = client.account()
+            account_equity = float(account.get("equity") or 0)
+            a, b, c = st.columns(3)
+            a.metric("Alpaca account", account.get("status", "Unknown"))
+            b.metric("Paper equity", "$%.2f" % account_equity)
+            c.metric("Strategy risk / trade", "$%.2f" % RISK_DOLLARS)
+            if not (90 <= account_equity <= 110):
+                st.error("Account equity must be between $90 and $110 for this $100 strategy. Reset/create a paper account with $100 starting balance before enabling the bot.")
+        except BotError as exc:
+            st.error("Could not connect to Alpaca paper trading: " + str(exc))
+            account = None
+
+        doc_for_bot = load_watchlist() or {}
+        candidates = [x.get("symbol", "") for x in doc_for_bot.get("hits", []) if x.get("symbol")]
+        if not candidates:
+            candidates = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "INTC"]
+        candidates = list(dict.fromkeys(candidates))
+        chosen_symbols = st.multiselect(
+            "Symbols monitored by the bot (maximum 25)",
+            options=candidates,
+            default=candidates[:10],
+            help="The bot checks these symbols for a confirmed intraday breakout. Daily scanner matches alone never trigger an order.",
+        )
+        chosen_symbols = chosen_symbols[:25]
+
+        st.markdown('<div class="nx-section"><div><small>VALIDATION / HISTORICAL REPLAY</small><h3>30-day strategy backtest</h3></div></div>', unsafe_allow_html=True)
+        backtest_symbol = st.selectbox("Backtest ticker", options=candidates, index=0)
+        if st.button("RUN 30-DAY BACKTEST", use_container_width=True, disabled=account is None):
+            end_dt = datetime.now(timezone.utc)
+            start_dt = end_dt - timedelta(days=35)
+            with st.spinner("Downloading 5-minute IEX bars and replaying the ORB rules..."):
+                try:
+                    hist = client.bars(
+                        backtest_symbol,
+                        start_dt.isoformat().replace("+00:00", "Z"),
+                        end_dt.isoformat().replace("+00:00", "Z"),
+                    )
+                    report = backtest_orb(hist, capital=BASE_CAPITAL)
+                    st.session_state["nexus_backtest"] = report
+                    st.session_state["nexus_backtest_symbol"] = backtest_symbol
+                except BotError as exc:
+                    st.error("Backtest failed: " + str(exc))
+        if st.session_state.get("nexus_backtest"):
+            report = st.session_state["nexus_backtest"]
+            st.caption("Historical replay for " + st.session_state.get("nexus_backtest_symbol", "") + ". Estimated 5 bp slippage per side; same-bar stop/target collisions assume the stop fills first.")
+            x1, x2, x3, x4 = st.columns(4)
+            x1.metric("Trades", report["trade_count"])
+            x2.metric("Win rate", "%.1f%%" % report["win_rate"])
+            x3.metric("Net P/L", "$%.2f" % report["net_pnl"])
+            x4.metric("Ending balance", "$%.2f" % report["ending_equity"])
+            if report["trades"]:
+                import pandas as pd
+                st.dataframe(pd.DataFrame(report["trades"]), use_container_width=True, hide_index=True)
+            st.caption(report["note"])
+
+        st.markdown('<div class="nx-section"><div><small>CONTROL / PAPER EXECUTION</small><h3>Automated decision cycle</h3></div></div>', unsafe_allow_html=True)
+        st.warning("This button can submit a real order to your Alpaca PAPER account (virtual money only). A market gap can make the actual loss larger than the planned $1.")
+        armed = st.checkbox("I understand this submits simulated paper orders and I want to enable one bot cycle.")
+        if st.button("▶  RUN ONE PAPER BOT CYCLE", type="primary", use_container_width=True, disabled=(not armed or account is None or not chosen_symbols)):
+            with st.spinner("Checking market clock, account limits, positions and 5-minute breakout signals..."):
+                try:
+                    result = run_cycle(client, chosen_symbols)
+                    st.session_state["nexus_last_cycle"] = result
+                except BotError as exc:
+                    st.session_state["nexus_last_cycle"] = {"status": "error", "message": str(exc)}
+        if st.session_state.get("nexus_last_cycle"):
+            result = st.session_state["nexus_last_cycle"]
+            if result.get("status") == "submitted":
+                st.success(result.get("message", "Paper order submitted."))
+            elif result.get("status") in ("blocked", "error"):
+                st.error(result.get("message", "Bot blocked."))
+            else:
+                st.info(result.get("message", "No action taken."))
+            st.json(result)
+
+    st.info("The hosted dashboard runs one cycle only when you press the button. Streamlit Community Cloud sleeps and is not a reliable always-on trading worker. For continuous intraday monitoring, run nexus_bot.py --loop on an always-on Windows PC/VPS; stop it with Ctrl+C.")
+
 # ---------- System ----------
 with tab_about:
     st.markdown('<div class="nx-section"><div><small>MODULE 04 / TRANSPARENCY</small><h3>System status & safeguards</h3></div></div>', unsafe_allow_html=True)
@@ -395,6 +505,6 @@ with tab_about:
         "Free public data may be delayed, rate-limited, adjusted, incomplete or incorrect. "
         "Technical matches are not recommendations and are not guaranteed to be profitable."
     )
-    st.info("This dashboard is a research interface for the MIT-licensed day-trader-skill project. Live trading is not implemented. Never add broker API keys or credentials to this public repository.")
+    st.info("NEXUS automated execution is locked to Alpaca paper trading. API keys belong only in Streamlit Secrets or local environment variables, never in this public repository.")
 
 st.markdown('<div class="nx-foot">NEXUS TERMINAL · MARKET INTELLIGENCE · PAPER / RESEARCH ONLY</div>', unsafe_allow_html=True)
