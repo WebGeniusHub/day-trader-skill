@@ -227,7 +227,7 @@ st.markdown("""
   <div class="nx-kicker">MARKET INTELLIGENCE SYSTEM / 01</div>
   <h1>NEXUS <span style="color:#4de5d0">TERMINAL</span></h1>
   <p>A focused command center for discovering technical setups, tracking market catalysts and reviewing entry conditions.</p>
-  <div style="margin-top:20px"><span class="nx-pill"><span class="nx-dot"></span> RESEARCH ENVIRONMENT · LIVE ORDERS DISABLED</span></div>
+  <div style="margin-top:20px"><span class="nx-pill"><span class="nx-dot"></span> PAPER EXECUTION ONLY · LIVE ENDPOINT DISABLED</span></div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -401,6 +401,7 @@ with tab_bot:
         st.markdown("Create an Alpaca **paper-only** account and set its starting balance to **$100**. The bot blocks accounts whose equity is outside $90–$110.")
     else:
         client = AlpacaPaperClient(alpaca_key, alpaca_secret)
+        account_ready = False
         try:
             account = client.account()
             account_equity = float(account.get("equity") or 0)
@@ -408,11 +409,19 @@ with tab_bot:
             a.metric("Alpaca account", account.get("status", "Unknown"))
             b.metric("Paper equity", "$%.2f" % account_equity)
             c.metric("Strategy risk / trade", "$%.2f" % RISK_DOLLARS)
+            account_ready = (
+                account.get("status") == "ACTIVE"
+                and not account.get("trading_blocked")
+                and 90 <= account_equity <= 110
+            )
             if not (90 <= account_equity <= 110):
                 st.error("Account equity must be between $90 and $110 for this $100 strategy. Reset/create a paper account with $100 starting balance before enabling the bot.")
+            elif not account_ready:
+                st.error("Alpaca account is not active or trading is blocked. The bot remains disabled.")
         except BotError as exc:
             st.error("Could not connect to Alpaca paper trading: " + str(exc))
             account = None
+            account_ready = False
 
         doc_for_bot = load_watchlist() or {}
         candidates = [x.get("symbol", "") for x in doc_for_bot.get("hits", []) if x.get("symbol")]
@@ -460,7 +469,7 @@ with tab_bot:
         st.markdown('<div class="nx-section"><div><small>CONTROL / PAPER EXECUTION</small><h3>Automated decision cycle</h3></div></div>', unsafe_allow_html=True)
         st.warning("This button can submit a real order to your Alpaca PAPER account (virtual money only). A market gap can make the actual loss larger than the planned $1.")
         armed = st.checkbox("I understand this submits simulated paper orders and I want to enable one bot cycle.")
-        if st.button("▶  RUN ONE PAPER BOT CYCLE", type="primary", use_container_width=True, disabled=(not armed or account is None or not chosen_symbols)):
+        if st.button("▶  RUN ONE PAPER BOT CYCLE", type="primary", use_container_width=True, disabled=(not armed or not account_ready or not chosen_symbols)):
             with st.spinner("Checking market clock, account limits, positions and 5-minute breakout signals..."):
                 try:
                     result = run_cycle(client, chosen_symbols)
@@ -481,7 +490,7 @@ with tab_bot:
 
 # ---------- System ----------
 with tab_about:
-    st.markdown('<div class="nx-section"><div><small>MODULE 04 / TRANSPARENCY</small><h3>System status & safeguards</h3></div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="nx-section"><div><small>MODULE 05 / TRANSPARENCY</small><h3>System status & safeguards</h3></div></div>', unsafe_allow_html=True)
     x, y = st.columns(2)
     with x:
         st.markdown("""
