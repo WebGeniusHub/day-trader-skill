@@ -374,7 +374,7 @@ with tab_bot:
     from datetime import datetime, timedelta, timezone
     from nexus_bot import (
         AlpacaPaperClient, BotError, backtest_orb, load_symbols, run_cycle,
-        BASE_CAPITAL, RISK_DOLLARS, MAX_DAILY_LOSS, MAX_TRADES_PER_DAY,
+        BASE_CAPITAL, RISK_DOLLARS, MAX_DAILY_LOSS, MAX_TRADES_PER_DAY, MAX_ENTRIES_LAST_7D,
         TARGET_R,
     )
 
@@ -384,7 +384,7 @@ with tab_bot:
     st.markdown("""
     <div class="nx-panel">
       <div class="nx-panel-title">ACTIVE STRATEGY PARAMETERS</div>
-      <div class="nx-panel-sub">Starting strategy capital: $100 · Risk per trade: $1 (1%) · Daily loss stop: $2 · Maximum 2 entries/day · Maximum 1 open position · Long-only · 15-minute opening range · 2R target · Entries stop at 3:30 PM ET · Bot positions flattened 5 minutes before session close (3:55 PM ET on regular days)</div>
+      <div class="nx-panel-sub">Starting strategy capital: $100 · Risk per trade: $1 (1%) · Daily loss stop: $2 · Maximum 2 entries/day · Maximum 3 entries per rolling 7 days · Maximum 1 open position · Long-only · 15-minute opening range · 2R target · Entries stop at 3:30 PM ET · Bot positions flattened 5 minutes before session close (3:55 PM ET on regular days)</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -505,9 +505,9 @@ with tab_about:
         st.markdown("""
         <div class="nx-panel">
           <div class="nx-panel-title">EXECUTION SAFETY</div>
-          <p class="nx-panel-sub">● Paper / research mode only</p>
-          <p class="nx-panel-sub">● No broker account connected</p>
-          <p class="nx-panel-sub">● No live orders or trade execution</p>
+          <p class="nx-panel-sub">● Alpaca paper endpoint only</p>
+          <p class="nx-panel-sub">● Simulated bracket orders only</p>
+          <p class="nx-panel-sub">● Live trading endpoint is not used</p>
         </div>
         """, unsafe_allow_html=True)
     st.warning(
