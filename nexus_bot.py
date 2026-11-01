@@ -270,7 +270,7 @@ def backtest_orb(bars, capital=BASE_CAPITAL):
 
 
 def _daily_order_stats(orders, today):
-    prefix = BOT_PREFIX + today + "-"
+    prefix = BOT_PREFIX + today.replace("-", "") + "-"
     parents = [o for o in orders if str(o.get("client_order_id", "")).startswith(prefix)]
     realized = 0.0
     for parent in parents:
@@ -282,6 +282,27 @@ def _daily_order_stats(orders, today):
                 exit_price = float(leg.get("filled_avg_price") or 0)
                 realized += (exit_price - entry) * qty
     return len(parents), realized, parents
+
+
+def flatten_bot_positions(client, positions, parents):
+    """Close only NEXUS-owned positions and cancel their remaining bracket legs."""
+    owned = {o.get("symbol"): o for o in parents
+             if str(o.get("client_order_id", "")).startswith(BOT_PREFIX)}
+    closed = []
+    for position in positions:
+        symbol = position.get("symbol")
+        if symbol not in owned:
+            continue
+        parent = owned[symbol]
+        for leg in parent.get("legs") or []:
+            if leg.get("status") not in ("filled", "canceled", "expired", "rejected"):
+                try:
+                    client.cancel_order(leg["id"])
+                except BotError:
+                    pass
+        client.close_position(symbol)
+        closed.append(symbol)
+    return closed
 
 
 def run_cycle(client, symbols, now=None):
@@ -307,22 +328,29 @@ def run_cycle(client, symbols, now=None):
     clock = client.clock()
     if not clock.get("is_open"):
         return {"status": "idle", "message": "NYSE session is currently closed."}
-    if (now.hour, now.minute) >= FLATTEN_TIME:
-        return {"status": "idle", "message": "Entry window closed; no new trades after 3:55 PM ET."}
-    if (now.hour, now.minute) < (9, 45):
-        return {"status": "idle", "message": "Waiting for the 15-minute opening range to complete (9:45 AM ET)."}
 
     today = now.strftime("%Y-%m-%d")
     start_utc = datetime.combine(now.date(), datetime.min.time(), tzinfo=ET).astimezone(timezone.utc)
     orders = client.orders(after=start_utc.isoformat().replace("+00:00", "Z"))
     trade_count, realized, parents = _daily_order_stats(orders, today)
+    positions = client.positions()
+
+    if (now.hour, now.minute) >= FLATTEN_TIME:
+        flattened = flatten_bot_positions(client, positions, parents)
+        return {"status": "flattened" if flattened else "idle",
+                "symbols": flattened,
+                "message": ("Closed NEXUS positions for the intraday cutoff." if flattened
+                            else "Intraday cutoff reached; no NEXUS-owned open positions found.")}
+
+    if (now.hour, now.minute) < (9, 45):
+        return {"status": "idle", "message": "Waiting for the 15-minute opening range to complete (9:45 AM ET)."}
+
     day_change = equity - float(account.get("last_equity") or equity)
     if day_change <= -MAX_DAILY_LOSS or realized <= -MAX_DAILY_LOSS:
         return {"status": "blocked", "message": "Daily loss guard reached (limit: $%.2f). No more entries today." % MAX_DAILY_LOSS}
     if trade_count >= MAX_TRADES_PER_DAY:
         return {"status": "blocked", "message": "Daily trade limit reached (%d)." % MAX_TRADES_PER_DAY}
 
-    positions = client.positions()
     if positions:
         return {"status": "idle", "message": "An open position already exists. NEXUS allows only one position at a time."}
 
