@@ -1,5 +1,4 @@
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +18,7 @@ st.sidebar.caption("No broker connection. No live orders. Scans and news are on-
 st.sidebar.markdown("**Data source**")
 st.sidebar.caption("Yahoo Finance and Nasdaq Trader public endpoints. Data can be delayed, incomplete, or incorrect.")
 
+
 def run_tool(args, timeout=900):
     try:
         result = subprocess.run(
@@ -35,6 +35,7 @@ def run_tool(args, timeout=900):
     except Exception as exc:
         return 1, str(exc)
 
+
 def load_watchlist():
     if not WATCHLIST.exists():
         return None
@@ -43,11 +44,13 @@ def load_watchlist():
     except (OSError, json.JSONDecodeError):
         return None
 
+
 def ensure_universe():
     if (TRADER / "universe.txt").exists():
         return 0, "Existing universe file found."
     TRADER.mkdir(exist_ok=True)
     return run_tool(["trader-scanner/scan.py", "universe"], timeout=180)
+
 
 tab_scan, tab_news, tab_entry, tab_about = st.tabs(
     ["Stock scanner", "News", "Entry check", "About & safety"]
@@ -57,21 +60,31 @@ with tab_scan:
     st.subheader("Daily stock scanner")
     st.write("Finds daily-chart setups across US-listed stocks. These are research candidates, not buy signals.")
     limit = st.slider("Maximum stocks to scan", min_value=100, max_value=5942, value=5942, step=100)
+
     if st.button("Run daily scan", type="primary", use_container_width=True):
         with st.spinner("Preparing the stock universe and scanning charts. This can take several minutes..."):
             code, message = ensure_universe()
             if code == 0:
-                code, message = run_tool([
-                    "trader-scanner/scan.py", "daily",
-                    "--limit", str(limit), "--json", "--show", "25"
-                ], timeout=1200)
-        if code in (0, 1):
-            st.session_state["scan_message"] = message
-            st.session_state["scan_code"] = code
+                # The dashboard reads the structured results from watchlist.json.
+                # Do not request or display the scanner's raw JSON console output.
+                code, message = run_tool(
+                    ["trader-scanner/scan.py", "daily", "--limit", str(limit)],
+                    timeout=1200,
+                )
+        if code == 0:
+            st.session_state["scan_status"] = "Scan completed successfully."
+            st.session_state.pop("scan_error", None)
         else:
-            st.error(message)
-    if "scan_message" in st.session_state:
-        st.code(st.session_state["scan_message"], language="text")
+            st.session_state["scan_error"] = message or "The scanner returned an error."
+            st.session_state.pop("scan_status", None)
+
+    if st.session_state.get("scan_status"):
+        st.success(st.session_state["scan_status"])
+    if st.session_state.get("scan_error"):
+        st.error("The scan did not complete successfully.")
+        with st.expander("Show diagnostic details"):
+            st.code(st.session_state["scan_error"], language="text")
+
     doc = load_watchlist()
     if doc:
         hits = doc.get("hits", [])
@@ -83,16 +96,24 @@ with tab_scan:
         st.caption(doc.get("note", ""))
         if hits:
             import pandas as pd
+
             rows = []
             for hit in hits:
                 rows.append({
                     "Ticker": hit.get("symbol", ""),
-                    "Name": hit.get("name", ""),
                     "Price": hit.get("price"),
                     "RSI": hit.get("rsi"),
+                    "Volume": hit.get("volume"),
                     "Setups": ", ".join(hit.get("setups", [])),
                 })
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            frame = pd.DataFrame(rows)
+            st.dataframe(frame, use_container_width=True, hide_index=True)
+            st.download_button(
+                "Download watchlist as CSV",
+                data=frame.to_csv(index=False).encode("utf-8"),
+                file_name="day-trader-watchlist.csv",
+                mime="text/csv",
+            )
         else:
             st.info("No matching setups in the saved watchlist yet.")
     else:
