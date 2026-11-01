@@ -39,8 +39,13 @@ class Repo(unittest.TestCase):
         self.assertEqual(found, sorted(SKILLS))
 
     def test_root_matches_the_reel(self):
-        root = sorted(d for d in os.listdir(ROOT) if not d.startswith(".git"))
-        self.assertEqual(root, sorted([".claude-plugin", "LICENSE", "README.md", "tests"] + SKILLS))
+        root = sorted(d for d in os.listdir(ROOT)
+                      if not d.startswith(".git") and d != "__pycache__")
+        dashboard_files = ["app.py", "nexus_bot.py", "requirements.txt"]
+        self.assertEqual(
+            root,
+            sorted([".claude-plugin", "LICENSE", "README.md", "tests"] + SKILLS + dashboard_files),
+        )
 
     def test_frontmatter_name_and_description(self):
         for s in SKILLS:
