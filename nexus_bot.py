@@ -203,6 +203,9 @@ def backtest_orb(bars, capital=BASE_CAPITAL):
     trades = []
     equity = float(capital)
     valid_opening_sessions = 0
+    breakout_signals = 0
+    rejected_risk_limit = 0
+    rejected_position_limit = 0
     for day in sorted(sessions):
         rows = sorted(sessions[day], key=lambda x: x[0])
         opening = [(t, b) for t, b in rows if (t.hour, t.minute) in ((9, 30), (9, 35), (9, 40))]
@@ -230,7 +233,16 @@ def backtest_orb(bars, capital=BASE_CAPITAL):
                 break
         if trigger is None:
             continue
+        breakout_signals += 1
         entry_time, entry_bar, entry = trigger
+        risk_per_share = entry - stop
+        risk_budget = equity * RISK_FRACTION
+        risk_capacity = math.floor(risk_budget / risk_per_share) if risk_per_share > 0 else 0
+        position_capacity = math.floor(min(equity, MAX_POSITION_VALUE) / entry) if entry > 0 else 0
+        if risk_capacity < 1:
+            rejected_risk_limit += 1
+        if position_capacity < 1:
+            rejected_position_limit += 1
         qty, planned_risk = size_position(entry, stop, capital=equity)
         if qty < 1:
             continue
@@ -278,6 +290,9 @@ def backtest_orb(bars, capital=BASE_CAPITAL):
         "bars_received": len(bars),
         "sessions_with_data": len(sessions),
         "valid_opening_sessions": valid_opening_sessions,
+        "breakout_signals": breakout_signals,
+        "rejected_risk_limit": rejected_risk_limit,
+        "rejected_position_limit": rejected_position_limit,
         "note": "Historical replay only; stop-first same-bar assumption and estimated slippage. Not a prediction.",
     }
 
