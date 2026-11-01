@@ -442,12 +442,12 @@ with tab_bot:
         )
         chosen_symbols = chosen_symbols[:25]
 
-        st.markdown('<div class="nx-section"><div><small>VALIDATION / HISTORICAL REPLAY</small><h3>30-day strategy backtest</h3></div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="nx-section"><div><small>VALIDATION / HISTORICAL REPLAY</small><h3>90-day strategy backtest</h3></div></div>', unsafe_allow_html=True)
         backtest_symbol = st.selectbox("Backtest ticker", options=candidates, index=0)
-        if st.button("RUN 30-DAY BACKTEST", use_container_width=True, disabled=account is None):
+        if st.button("RUN 90-DAY BACKTEST", use_container_width=True, disabled=account is None):
             end_dt = datetime.now(timezone.utc)
-            start_dt = end_dt - timedelta(days=35)
-            with st.spinner("Downloading 5-minute IEX bars and replaying the ORB rules..."):
+            start_dt = end_dt - timedelta(days=100)
+            with st.spinner("Downloading approximately 90 calendar days of 5-minute IEX bars and replaying the ORB rules..."):
                 try:
                     hist = client.bars(
                         backtest_symbol,
@@ -475,6 +475,10 @@ with tab_bot:
                     report.get("valid_opening_sessions", 0),
                 )
             )
+            d1, d2, d3 = st.columns(3)
+            d1.metric("Confirmed breakout signals", report.get("breakout_signals", 0))
+            d2.metric("Rejected by $1 risk cap", report.get("rejected_risk_limit", 0))
+            d3.metric("Rejected by $100 position cap", report.get("rejected_position_limit", 0))
             if report["trades"]:
                 import pandas as pd
                 st.dataframe(pd.DataFrame(report["trades"]), use_container_width=True, hide_index=True)
