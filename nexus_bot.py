@@ -329,13 +329,24 @@ def run_cycle(client, symbols, now=None):
     if not clock.get("is_open"):
         return {"status": "idle", "message": "NYSE session is currently closed."}
 
+    # Use five minutes before the actual session close, including half-days.
+    next_close = as_et(clock["next_close"]) if clock.get("next_close") else now.replace(
+        hour=16, minute=0, second=0, microsecond=0
+    )
+    regular_flatten = now.replace(hour=FLATTEN_TIME[0], minute=FLATTEN_TIME[1], second=0, microsecond=0)
+    flatten_at = min(regular_flatten, next_close - timedelta(minutes=5))
+    entry_cutoff = min(
+        now.replace(hour=ENTRY_CUTOFF[0], minute=ENTRY_CUTOFF[1], second=0, microsecond=0),
+        flatten_at - timedelta(minutes=25),
+    )
+
     today = now.strftime("%Y-%m-%d")
     start_utc = datetime.combine(now.date(), datetime.min.time(), tzinfo=ET).astimezone(timezone.utc)
     orders = client.orders(after=start_utc.isoformat().replace("+00:00", "Z"))
     trade_count, realized, parents = _daily_order_stats(orders, today)
     positions = client.positions()
 
-    if (now.hour, now.minute) >= FLATTEN_TIME:
+    if now >= flatten_at:
         flattened = flatten_bot_positions(client, positions, parents)
         return {"status": "flattened" if flattened else "idle",
                 "symbols": flattened,
@@ -354,8 +365,8 @@ def run_cycle(client, symbols, now=None):
     if positions:
         return {"status": "idle", "message": "An open position already exists. NEXUS allows only one position at a time."}
 
-    if (now.hour, now.minute) > ENTRY_CUTOFF:
-        return {"status": "idle", "message": "Entry cutoff passed (3:30 PM ET)."}
+    if now > entry_cutoff:
+        return {"status": "idle", "message": "Entry cutoff passed; no new trade is opened within 25 minutes of the session close."}
 
     for symbol in list(dict.fromkeys(s.upper() for s in symbols if s))[:25]:
         client_id = BOT_PREFIX + now.strftime("%Y%m%d") + "-" + symbol
