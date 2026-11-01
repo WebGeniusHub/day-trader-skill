@@ -467,6 +467,14 @@ with tab_bot:
             x2.metric("Win rate", "%.1f%%" % report["win_rate"])
             x3.metric("Net P/L", "$%.2f" % report["net_pnl"])
             x4.metric("Ending balance", "$%.2f" % report["ending_equity"])
+            st.caption(
+                "Data diagnostics: %s five-minute bars received · %s dates with data · %s dates with all three opening-range candles."
+                % (
+                    report.get("bars_received", 0),
+                    report.get("sessions_with_data", 0),
+                    report.get("valid_opening_sessions", 0),
+                )
+            )
             if report["trades"]:
                 import pandas as pd
                 st.dataframe(pd.DataFrame(report["trades"]), use_container_width=True, hide_index=True)
