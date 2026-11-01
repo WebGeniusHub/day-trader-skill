@@ -211,8 +211,13 @@ def backtest_orb(bars, capital=BASE_CAPITAL):
         lo = min(float(x[1]["l"]) for x in opening)
         stop = (hi + lo) / 2
         trigger = None
+        session_flatten = min(
+            datetime.combine(day, datetime.min.time(), tzinfo=ET).replace(hour=15, minute=55),
+            rows[-1][0],
+        )
+        session_entry_cutoff = session_flatten - timedelta(minutes=25)
         for t, bar in rows:
-            if (t.hour, t.minute) < (9, 45) or (t.hour, t.minute) > ENTRY_CUTOFF:
+            if t < datetime.combine(day, datetime.min.time(), tzinfo=ET).replace(hour=9, minute=45) or t > session_entry_cutoff:
                 continue
             close = float(bar["c"])
             if close > hi and close <= hi * 1.01:
