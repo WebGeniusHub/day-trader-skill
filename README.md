@@ -214,3 +214,46 @@ tests/              unittest suite + offline fixtures
 ```
 
 MIT. Made by [Jake Schincariol](https://opusjake.ai).
+
+
+## NEXUS paper autopilot
+
+The fork also includes a separate Streamlit dashboard and an Alpaca **paper-only**
+intraday bot. The bot is intentionally isolated from the live trading endpoint.
+
+Strategy and controls:
+
+- Long-only 15-minute opening-range breakout using 5-minute Alpaca IEX bars.
+- Entry on a completed 5-minute close above the opening-range high; stop at the range midpoint; target at 2R.
+- Fixed $100 strategy capital, 1% planned risk ($1) per trade, $100 maximum position value.
+- Whole-share bracket orders only; if one share would exceed the risk budget, the symbol is skipped.
+- One open position at a time, no more than two entries per day, $2 daily loss guard.
+- New entries stop 25 minutes before the session close; NEXUS positions are flattened five minutes before the session close, including early-close sessions.
+- Duplicate daily orders are prevented with a deterministic Alpaca client order ID.
+- Historical replay includes estimated slippage and assumes the stop fills first if a bar touches both stop and target.
+
+### Alpaca paper setup
+
+1. Create an Alpaca **paper-only** account and configure its starting balance to $100.
+2. Create paper API keys. Never use live keys.
+3. In Streamlit Community Cloud, open **Manage app → Settings → Secrets** and add:
+
+   ```toml
+   ALPACA_API_KEY = "your-paper-key"
+   ALPACA_SECRET_KEY = "your-paper-secret"
+   ```
+
+4. Open the NEXUS **AUTOPILOT** tab, check the 30-day backtest, select symbols, and explicitly arm one paper cycle before allowing an order.
+
+For continuous intraday monitoring, run the bot on an always-on machine after configuring
+`ALPACA_API_KEY` and `ALPACA_SECRET_KEY` as local environment variables:
+
+```bash
+python nexus_bot.py --loop --interval 60
+```
+
+Stop the local process with Ctrl+C. Streamlit Community Cloud is not an always-on worker;
+its dashboard button runs one cycle only. Alpaca paper orders are simulated, not live,
+and fills/slippage can differ from the backtest. The $1 planned stop risk is not a
+guaranteed maximum loss: gaps, halts, latency or rejected/partial orders can produce
+larger losses. The bot should remain paper-only until its results have been reviewed.
